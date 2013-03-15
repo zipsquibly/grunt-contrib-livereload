@@ -30,6 +30,8 @@ describe('livereloadSnippet', function () {
       write: function (string) {
         writeString = string;
       },
+      end: function (string) {
+      },
       setHeader: function (header, value) {
         headers[header] = value;
       },
@@ -42,6 +44,7 @@ describe('livereloadSnippet', function () {
     };
     utils.livereloadSnippet(req, res, next);
     res.write('<body>我能吞下玻璃而不伤身体。</body>','ascii');
+    res.end();
     // original write is called
     assert.ok(writeString.match(/livereload snippet/));
     assert.equal(headers['content-length'], 206);
@@ -66,6 +69,8 @@ describe('livereloadSnippet', function () {
       write: function (string) {
         writeString = string;
       },
+      end: function (string) {
+      },
       setHeader: function (header, value) {
         headers[header] = value;
       },
@@ -78,8 +83,54 @@ describe('livereloadSnippet', function () {
     };
     utils.livereloadSnippet(req, res, next);
     res.write('<h1>Foo</h1><p>Multibyte characters here: ääää ööööö åååååå</p><p>Some html here</p>');
+    res.end();
     // original write is called
     assert.equal(headers['content-length'], 99);
+    assert.ok(implicitHeaderCalled);
+  });
+
+  it('should send handle chunked responses greater than 40K', function(done) {
+    var req = { url: '/' };
+    var headers = {};
+    var implicitHeaderCalled = false;
+    var writeString = '';
+    var res = {
+      socket: {
+        server: {
+          address: function () {
+            return {
+              port: 12345
+            };
+          }
+        }
+      },
+      end: function (string) {
+        // do nothing
+      },
+      write: function (string) {
+        writeString = string;
+      },
+      setHeader: function (header, value) {
+        headers[header] = value;
+      },
+      _implicitHeader: function () {
+        implicitHeaderCalled = true;
+      }
+    };
+    var next = function () {
+      done();
+    };
+    var block = "1"; 
+    var iterations = 16; // 32768 bytes
+    for (var i = 0; i < iterations; i++) {
+      block = block.concat(block);
+    }
+    utils.livereloadSnippet(req, res, next);
+    res.write(block);
+    res.write(block);
+    // original write is called
+    res.end();
+    assert.equal(headers['content-length'], block.length * 2);
     assert.ok(implicitHeaderCalled);
   });
 
@@ -89,6 +140,9 @@ describe('livereloadSnippet', function () {
     var res = {
       write: function (string) {
         writeString = string;
+      },
+      end: function () {
+        // do nothing
       }
     };
     var next = function () {
@@ -96,6 +150,7 @@ describe('livereloadSnippet', function () {
     };
     utils.livereloadSnippet(req, res, next);
     res.write('fred');
+    res.end();
     assert.equal('fred', writeString);
   });
 });
